@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-10-14
+
 ### Added
 
 - **Kilo Code.** A Kilo pane gets a sidebar row like any other agent: the
@@ -1104,7 +1106,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A popup dashboard pane, event-driven refresh, and a local snapshot cache that
   survives provider failures.
 
-[Unreleased]: https://github.com/guannanjiayou/herdr-agent-usage/compare/v1.6.3...HEAD
+[Unreleased]: https://github.com/guannanjiayou/herdr-agent-usage/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/guannanjiayou/herdr-agent-usage/compare/cd6927b282...v1.7.0
 [1.6.3]: https://github.com/guannanjiayou/herdr-agent-usage/compare/v1.6.2...v1.6.3
 [1.6.2]: https://github.com/guannanjiayou/herdr-agent-usage/compare/v1.6.1...v1.6.2
 [1.6.1]: https://github.com/guannanjiayou/herdr-agent-usage/compare/v1.6.0...v1.6.1
