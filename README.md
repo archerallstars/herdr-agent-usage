@@ -3,7 +3,7 @@
 Model, context, and subscription quota in Herdr's Agent sidebar — grouped by
 Space, with brand icons that carry agent status.
 
-[![CI](https://github.com/guannanjiayou2-pixel/herdr-agent-usage/actions/workflows/ci.yml/badge.svg)](https://github.com/guannanjiayou2-pixel/herdr-agent-usage/actions/workflows/ci.yml)
+[![CI](https://github.com/guannanjiayou/herdr-agent-usage/actions/workflows/ci.yml/badge.svg)](https://github.com/guannanjiayou/herdr-agent-usage/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 [简体中文](README.zh-CN.md)
@@ -37,12 +37,14 @@ and Muse share by vendor; Claude by the account of the session's
 session bills (omp by its credential pin, else by the profile and stored
 credential that served the session). A tab whose payer cannot be proven keeps
 its own row, and so does every Agy tab. Under Herdr's own agent order only
-adjacent tabs share a row. On a
+adjacent tabs share a row; the `quota` and `tabs` orders draw every tab of one
+account together. On a
 wide sidebar, the vendor icon and name sit above that pane's quota, and extra
 tabs list model, topic, and context with no icon. A settings row gap of 1 still
 separates different agents; nested extra tabs of the same vendor stay flush.
 Closing, moving, or leaving a tab regroups the tabs left behind right away.
-Agent order defaults to Space grouping with least quota left first inside each space.
+Agent order defaults to Space grouping with least quota left first inside each space;
+`tabs` keeps tab order instead, and `prefix+shift+o` switches between the two.
 Low-quota notifications stay off until you set a threshold. Switch layout,
 fields, percentages, and optional pacing from the settings pane
 (`prefix+shift+q`).
@@ -53,7 +55,7 @@ Requires **Herdr 0.9.0+**, the Rust toolchain pinned in `rust-toolchain.toml`,
 macOS or Linux, and a supported agent CLI.
 
 ```sh
-git clone https://github.com/guannanjiayou2-pixel/herdr-agent-usage.git
+git clone https://github.com/guannanjiayou/herdr-agent-usage.git
 cd herdr-agent-usage
 ./install.sh
 ```
@@ -100,7 +102,7 @@ Install and fully configure herdr-agent-usage on this computer until Herdr's
 Agent sidebar shows brand icons and quota for the agent CLIs I actually have.
 Stopping after ./install.sh is not done. Icons as boxes or "?" are unfinished.
 
-Repo: https://github.com/guannanjiayou2-pixel/herdr-agent-usage
+Repo: https://github.com/guannanjiayou/herdr-agent-usage
 If this working tree is already that repo, use it; otherwise clone it, cd in,
 and follow docs/agent-setup.md (English) or docs/agent-setup.zh-CN.md (中文).
 If you cannot read those files, do all of the following anyway.
@@ -184,7 +186,7 @@ herdr plugin pane open --plugin herdr-agent-usage --entrypoint settings --focus
 | Row gap | Zero or one blank line between agents |
 | Watch interval | 30 seconds–1 hour; default 60 seconds |
 | Fields | Provider, topic, model, context, short/long/monthly quota on by default; cache and TTL optional |
-| Agent order | Group by Space, least quota left first (default); or Herdr's own policy |
+| Agent order | Group by Space, least quota left first (default); by Space in tab order with one account's tabs together; or Herdr's own policy |
 | Low quota alert | Off or a threshold from 1% to 100% |
 | Agents | Claude, Codex, Grok, Agy, OpenCode, Pi, OMP, Devin, Muse, Cursor, Kilo |
 
@@ -218,7 +220,7 @@ normal quota percentage instead of guessing.
 | Agy / Antigravity | StatusLine; 5h, 7d, and api (third-party pool on Gemini) | Exact session and identifiable model pool |
 | OpenCode | OpenCode console Go meters; per-key usage endpoint as fallback | The active console login stored by OpenCode (its `credential` table), which also proves a Go session without a key; the Go API key only when the store holds no console connection |
 | Pi | Canonical Codex quota | Only when the recorded account matches |
-| OMP | `omp usage --json --provider <id>` | Reported account matching the session's credential pin |
+| OMP | `omp usage --json --provider <id>` | Reported account matching the session's credential pin; one of several stored API keys, which omp reports without an identity, shows the pool (`1/2 keys usable · next 3h10m`) |
 | Kilo Code | Kilo Pass account state (`kiloPass.getState`); 30d | The OAuth gateway login in Kilo's `auth.json`, and only for a session whose backend is the Kilo Gateway; context from that session's messages and Kilo's model catalog |
 
 An OpenCode pane that has not started a session yet shows the account's Go
