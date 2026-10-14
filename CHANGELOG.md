@@ -1078,21 +1078,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A popup dashboard pane, event-driven refresh, and a local snapshot cache that
   survives provider failures.
 
-[Unreleased]: https://github.com/levi-qiao/herdr-agent-usage/compare/v1.6.3...HEAD
-[1.6.3]: https://github.com/levi-qiao/herdr-agent-usage/compare/v1.6.2...v1.6.3
-[1.6.2]: https://github.com/levi-qiao/herdr-agent-usage/compare/v1.6.1...v1.6.2
-[1.6.1]: https://github.com/levi-qiao/herdr-agent-usage/compare/v1.6.0...v1.6.1
-[1.6.0]: https://github.com/levi-qiao/herdr-agent-usage/compare/v1.5.5...v1.6.0
-[1.5.5]: https://github.com/levi-qiao/herdr-agent-usage/compare/v1.5.4...v1.5.5
-[1.5.4]: https://github.com/levi-qiao/herdr-agent-usage/compare/v1.5.3...v1.5.4
-[1.5.3]: https://github.com/levi-qiao/herdr-agent-usage/compare/v1.5.2...v1.5.3
-[1.5.2]: https://github.com/levi-qiao/herdr-agent-usage/compare/v1.5.1...v1.5.2
-[1.5.1]: https://github.com/levi-qiao/herdr-agent-usage/compare/v1.5.0...v1.5.1
-[1.5.0]: https://github.com/levi-qiao/herdr-agent-usage/compare/v1.4.0...v1.5.0
-[1.4.0]: https://github.com/levi-qiao/herdr-agent-usage/compare/v1.3.0...v1.4.0
-[1.3.0]: https://github.com/levi-qiao/herdr-agent-usage/compare/v1.2.0...v1.3.0
-[1.2.0]: https://github.com/levi-qiao/herdr-agent-usage/compare/v1.1.0...v1.2.0
-[1.1.0]: https://github.com/levi-qiao/herdr-agent-usage/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/levi-qiao/herdr-agent-usage/compare/v0.2.0...v1.0.0
-[0.2.0]: https://github.com/levi-qiao/herdr-agent-usage/releases/tag/v0.2.0
-[0.1.0]: https://github.com/levi-qiao/herdr-agent-usage/releases/tag/v0.1.0
+[Unreleased]: https://github.com/guannanjiayou2-pixel/herdr-agent-usage/compare/v1.6.3...HEAD
+[1.6.3]: https://github.com/guannanjiayou2-pixel/herdr-agent-usage/compare/v1.6.2...v1.6.3
+[1.6.2]: https://github.com/guannanjiayou2-pixel/herdr-agent-usage/compare/v1.6.1...v1.6.2
+[1.6.1]: https://github.com/guannanjiayou2-pixel/herdr-agent-usage/compare/v1.6.0...v1.6.1
+[1.6.0]: https://github.com/guannanjiayou2-pixel/herdr-agent-usage/compare/v1.5.5...v1.6.0
+[1.5.5]: https://github.com/guannanjiayou2-pixel/herdr-agent-usage/compare/v1.5.4...v1.5.5
+[1.5.4]: https://github.com/guannanjiayou2-pixel/herdr-agent-usage/compare/v1.5.3...v1.5.4
+[1.5.3]: https://github.com/guannanjiayou2-pixel/herdr-agent-usage/compare/v1.5.2...v1.5.3
+[1.5.2]: https://github.com/guannanjiayou2-pixel/herdr-agent-usage/compare/v1.5.1...v1.5.2
+[1.5.1]: https://github.com/guannanjiayou2-pixel/herdr-agent-usage/compare/v1.5.0...v1.5.1
+[1.5.0]: https://github.com/guannanjiayou2-pixel/herdr-agent-usage/compare/v1.4.0...v1.5.0
+[1.4.0]: https://github.com/guannanjiayou2-pixel/herdr-agent-usage/compare/v1.3.0...v1.4.0
+[1.3.0]: https://github.com/guannanjiayou2-pixel/herdr-agent-usage/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/guannanjiayou2-pixel/herdr-agent-usage/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/guannanjiayou2-pixel/herdr-agent-usage/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/guannanjiayou2-pixel/herdr-agent-usage/compare/v0.2.0...v1.0.0
+[0.2.0]: https://github.com/guannanjiayou2-pixel/herdr-agent-usage/releases/tag/v0.2.0
+[0.1.0]: https://github.com/guannanjiayou2-pixel/herdr-agent-usage/releases/tag/v0.1.0
