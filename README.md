@@ -126,7 +126,8 @@ Rules:
    omp (omp, ~/.omp), devin (devin, ~/.local/share/devin),
    muse (muse or muse-code, ~/.config/muse),
    cursor (cursor or cursor-agent, ~/.cursor),
-   kilo (kilo, ~/.local/share/kilo).
+   kilo (kilo, ~/.local/share/kilo),
+   mimo (mimo, ~/.local/share/mimocode).
    Print the list. If none, install all and say so.
 
 3. From the repo: git pull --ff-only if this is main and clean; then
@@ -138,15 +139,17 @@ Rules:
    - Wait for configure/refresh logs to succeed (invoke returns while running).
    - herdr integration status; for each detected agent that is "not installed",
      herdr integration install <id> (claude, codex, grok, opencode, pi, omp,
-     devin, cursor, kilo — not agy or muse). Skip CLIs the user does not have.
+     devin, cursor, kilo, mimo — not agy or muse). Skip CLIs the user does not have.
    - Font: configure copies Herdr Agent Icons Max to ~/Library/Fonts (macOS) or
      ~/.local/share/fonts (Linux) and maps Ghostty/kitty only if those configs
      already exist. Linux: fc-cache that fonts dir. Detect THIS terminal
-     (TERM_PROGRAM / KITTY_WINDOW_ID / WEZTERM_EXECUTABLE). PUA U+E1A0–U+E1B6
-     needs an explicit map or the cell is a box or "?". Ghostty:
-     font-codepoint-map = U+E1A0-U+E1B6="Herdr Agent Icons Max" (and U+E1C0–U+E1C5),
-     wrapped in "# BEGIN/END herdr-agent-usage font". kitty: symbol_map those
-     ranges to Herdr Agent Icons Max. WezTerm: add the family to font_with_fallback.
+     (TERM_PROGRAM / KITTY_WINDOW_ID / WEZTERM_EXECUTABLE). PUA needs an
+     explicit map or the cell is a box or "?". Ghostty:
+     font-codepoint-map = U+E1A0-U+E1B6="Herdr Agent Icons Max" (also U+E1C0–U+E1C5),
+     font-codepoint-map = U+E1B7="Herdr Agent MiMo",
+     wrapped in "# BEGIN/END herdr-agent-usage font". kitty: symbol_map the
+     vendor ranges to Herdr Agent Icons Max and U+E1B7 to Herdr Agent MiMo.
+     WezTerm: add both families to font_with_fallback.
      VS Code/Cursor: append it to terminal.integrated.fontFamily. Then reload
      the terminal (Ghostty cmd+shift+,, kitty ctrl+shift+f5). Muse's mark is ◈
      on purpose. Nested extra tabs of the same vendor have no icon by design.
@@ -222,6 +225,7 @@ normal quota percentage instead of guessing.
 | Pi | Canonical Codex quota | Only when the recorded account matches |
 | OMP | `omp usage --json --provider <id>` | Reported account matching the session's credential pin; one of several stored API keys, which omp reports without an identity, shows the pool (`1/2 keys usable · next 3h10m`) |
 | Kilo Code | Kilo Pass account state (`kiloPass.getState`); 30d | The OAuth gateway login in Kilo's `auth.json`, and only for a session whose backend is the Kilo Gateway; context from that session's messages and Kilo's model catalog |
+| MiMo | Context only (no quota API; no 5h/7d/30d) | MiMo's `mimocode.db` session tokens and `models.json` catalog; title from the session row |
 
 An OpenCode pane that has not started a session yet shows the account's Go
 meters when a console login exists; the first resolved session replaces them
@@ -266,7 +270,7 @@ turn failures into zero usage.
 
 | Symptom | Check |
 | --- | --- |
-| Brand icons are boxes or `?` | The icon font is missing or this terminal has no U+E1A0–U+E1B6 map — see [Ask an agent to finish setup](#ask-an-agent-to-finish-setup). Reload the terminal after `configure`. A yellow `?` on a build older than 1.6.1 was the working-state ZWNJ bug; upgrade. Muse uses the text mark `◈` on purpose. Nested extra tabs of vendors other than Codex have no icon by design. |
+| Brand icons are boxes or `?` | The icon font is missing or this terminal has no U+E1A0–U+E1B6 / U+E1B7 map — see [Ask an agent to finish setup](#ask-an-agent-to-finish-setup). Reload the terminal after `configure`. A yellow `?` on a build older than 1.6.1 was the working-state ZWNJ bug; upgrade. Muse uses the text mark `◈` on purpose. Nested extra tabs of vendors other than Codex have no icon by design. |
 | Session data is missing | Run `herdr integration status`; load missing integrations before restarting the affected agent |
 | Claude/Agy quota is missing | Send a turn so the session's StatusLine produces an observation |
 | OpenCode Go quota looks frozen | The console login is the source; without it the per-key endpoint is used, and a key that stopped serving traffic keeps its last reading. Sign in with `/connect` so a console login exists, then refresh |

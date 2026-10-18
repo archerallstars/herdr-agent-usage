@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **MiMo Code.** A MiMo pane gets a sidebar row with the agent name, the
+  session title as the topic, and the session's context-window bar (`cx`).
+  Xiaomi publishes no quota API, so 5h/7d/30d stay empty and no billing
+  collector is registered. Context is `input + cache.read + cache.write`
+  against the model catalog window in `models.json`. Sessions come from
+  `mimocode.db` (read-only; the credential tables are never selected). When
+  Herdr exposes an `agent_session` id that is used; otherwise the newest root
+  session (`parent_id IS NULL`) whose directory matches the pane cwd wins, and
+  two similarly recent root sessions in the same directory publish no `cx`
+  rather than a wrong one.
+
+  The sidebar icon is the official MiMo logo in a **separate** one-glyph face
+  (`Herdr Agent MiMo`) at `U+E1B7`. HerdrAgentIconsMax stays byte-identical to
+  upstream (vendor range `U+E1A0–E1B6`); terminal maps and fontconfig append
+  both families.
+
 ## [1.7.0] - 2026-10-14
 
 ### Added
