@@ -108,8 +108,7 @@ docs/agent-setup.zh-CN.md（中文）或 docs/agent-setup.md（英文）执行�
    omp（omp，~/.omp）、devin（devin，~/.local/share/devin）、
    muse（muse 或 muse-code，~/.config/muse）、
    cursor（cursor 或 cursor-agent，~/.cursor）、
-   kilo（kilo，~/.local/share/kilo）、
-   mimo（mimo，~/.local/share/mimocode）。
+   kilo（kilo，~/.local/share/kilo）。
    先打印探测结果。一个都没有就装 all，并说明。
 
 3. 在仓库里：若是干净的 main 先 git pull --ff-only，然后
@@ -121,17 +120,15 @@ docs/agent-setup.zh-CN.md（中文）或 docs/agent-setup.md（英文）执行�
    - 等到 configure/refresh 日志 succeeded（invoke 会在 running 时就返回）。
    - herdr integration status；已探测到且为 not installed 的，执行
      herdr integration install <id>（claude、codex、grok、opencode、pi、omp、
-     devin、cursor、kilo、mimo；agy 和 muse 不需要）。用户没有的 CLI 不要装。
+     devin、cursor、kilo；agy 和 muse 不需要）。用户没有的 CLI 不要装。
    - 字体：configure 会把 Herdr Agent Icons Max 拷到 ~/Library/Fonts（macOS）
      或 ~/.local/share/fonts（Linux），且仅当 Ghostty/kitty 配置已存在时写入
      映射。Linux 对该字体目录跑 fc-cache。判断当前终端（TERM_PROGRAM /
-     KITTY_WINDOW_ID / WEZTERM_EXECUTABLE）。PUA U+E1A0–U+E1B6（Herdr Agent Icons Max）与 U+E1B7（Herdr Agent MiMo）必须显式映射，
+     KITTY_WINDOW_ID / WEZTERM_EXECUTABLE）。PUA U+E1A0–U+E1B6 必须显式映射，
      否则格子是方框或「?」。Ghostty：
      font-codepoint-map = U+E1A0-U+E1B6="Herdr Agent Icons Max"
-     font-codepoint-map = U+E1B7="Herdr Agent MiMo"
      （以及 U+E1C0–U+E1C5），包在 # BEGIN/END herdr-agent-usage font 里。
-     kitty：symbol_map 把 E1A0–E1B6 / E1C0–E1C5 映射到 Herdr Agent Icons Max，
-     E1B7 映射到 Herdr Agent MiMo。WezTerm：把两个 family
+     kitty：symbol_map 同样范围到 Herdr Agent Icons Max。WezTerm：把该 family
      加进 font_with_fallback。VS Code/Cursor：追加到
      terminal.integrated.fontFamily。然后重载终端（Ghostty cmd+shift+,，
      kitty ctrl+shift+f5）。Muse 故意用文本标记 ◈。宽栏里同一厂商的嵌套子行
@@ -193,7 +190,6 @@ Claude 状态栏节奏是独立开关，默认开启以保持升级前行为；�
 | Pi | 规范 Codex collector 的额度 | 仅在记录的账号一致时复用 |
 | OMP | `omp usage --json --provider <id>` | usage 账号与会话 credential pin 一致；多个已存 API key（omp 的报告不带身份信息）时显示整个池（`1/2 keys usable · next 3h10m`） |
 | Kilo Code | Kilo Pass 账号状态（`kiloPass.getState`）；30d | Kilo `auth.json` 里的 OAuth 网关登录，且只对后端为 Kilo Gateway 的会话生效；上下文取自该会话的消息与 Kilo 的模型目录 |
-| MiMo | 仅上下文（无额度 API；无 5h/7d/30d） | MiMo 的 `mimocode.db` 会话 token 与 `models.json` 目录；标题来自 session 行 |
 
 Claude Code 状态栏始终保留用户自己的 statusLine 输出。**StatusLine pace** 默认开启以保持现有行为；
 关闭后不再追加节奏。开启时会在末尾追加当前生效额度窗口的消耗节奏，例如 `⏱ 5h ↓12%`：
@@ -219,7 +215,7 @@ Claude/Agy 没有可靠的服务账号 ID，因此不跨会话共享观测值。
 
 | 现象 | 检查 |
 | --- | --- |
-| 品牌图标是方框或 `?` | 字体没装上，或当前终端没有 U+E1A0–U+E1B6 / U+E1B7 映射——见 [让 Agent 装完整](#让-agent-装完整)。`configure` 之后要重载终端。1.6.1 之前工作态的黄色 `?` 是 ZWNJ 的 bug，先升级。Muse 故意用文本标记 `◈`。宽栏里同一厂商的嵌套子行本来就没有图标。 |
+| 品牌图标是方框或 `?` | 字体没装上，或当前终端没有 U+E1A0–U+E1B6 映射——见 [让 Agent 装完整](#让-agent-装完整)。`configure` 之后要重载终端。1.6.1 之前工作态的黄色 `?` 是 ZWNJ 的 bug，先升级。Muse 故意用文本标记 `◈`。宽栏里同一厂商的嵌套子行本来就没有图标。 |
 | 缺少会话数据 | 运行 `herdr integration status`，安装缺失项后重启对应 agent |
 | Claude/Agy 缺少额度 | 发送一轮消息，让该会话的 StatusLine 产生观测 |
 | OMP 缺少额度 | 检查 `omp usage --json --redact --provider <id>` |
