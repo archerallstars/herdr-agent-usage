@@ -227,6 +227,18 @@ normal quota percentage instead of guessing.
 | Kilo Code | Kilo Pass account state (`kiloPass.getState`); 30d | The OAuth gateway login in Kilo's `auth.json`, and only for a session whose backend is the Kilo Gateway; context from that session's messages and Kilo's model catalog |
 | MiMo | Context only (no quota API; no 5h/7d/30d) | MiMo's `mimocode.db` session tokens and `models.json` catalog; title from the session row |
 
+### MiMo + mimo-code-herdr
+
+Herdr has no native MiMo integration. Pair this plugin with
+[mimo-code-herdr](https://github.com/archerallstars/mimo-code-herdr) (custom
+`mimo` agent: lifecycle + session reporting). That bridge is what makes a
+pane show up as `mimo` so this plugin can publish identity, topic, and `cx`.
+Without it, Herdr has no `mimo` row to attach quota tokens to.
+
+This plugin never reads pane output for MiMo; context comes from
+`mimocode.db` (read-only) and the model catalog. There is no MiMo quota API,
+so 5h/7d/30d stay empty.
+
 An OpenCode pane that has not started a session yet shows the account's Go
 meters when a console login exists; the first resolved session replaces them
 with that pane's own backend, or clears them when it is not Go.
