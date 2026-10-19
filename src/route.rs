@@ -290,11 +290,19 @@ fn resolve_mimo_with_identity(
                 omp: None,
             }
         }
-        crate::mimo::SessionLookup::Missing
-        | crate::mimo::SessionLookup::Unreadable
-        | crate::mimo::SessionLookup::Ambiguous => ResolvedPane {
+        crate::mimo::SessionLookup::Missing | crate::mimo::SessionLookup::Ambiguous => {
+            ResolvedPane {
+                resolution: Resolution::Indeterminate,
+                identity: Some(base),
+                context: None,
+                session_summary: None,
+                omp: None,
+            }
+        }
+        // Locked or mid-write store: keep the previous model and cx.
+        crate::mimo::SessionLookup::Unreadable => ResolvedPane {
             resolution: Resolution::Indeterminate,
-            identity: Some(base),
+            identity: None,
             context: None,
             session_summary: None,
             omp: None,
@@ -1300,15 +1308,15 @@ mod tests {
                 r#"{"type":"step-finish","tokens":{"input":5299,"output":10,"reasoning":0,"cache":{"read":71424,"write":0}}}"#,
             )],
         );
-        // Occupancy 76723 / compact-at (90% of 1048576 = 943718) ≈ 8.13%
+        // Occupancy 76733 / usable floor(1048576*0.9)=943718 ≈ 8.13%
         let resolved = resolve_mimo_with_identity(None, "/proj", Some(paths));
         assert_eq!(resolved.resolution, Resolution::NoSubscription);
         let identity = resolved.identity.expect("identity");
         assert_eq!(identity.provider, "MiMo");
         assert_eq!(identity.model, "mimo-v2.6-pro");
         let context = resolved.context.expect("context");
-        let compact = 1_048_576 * 90 / 100;
-        assert!((context.used_percent - 76_723.0 / compact as f64 * 100.0).abs() < 0.01);
+        let compact = (1_048_576.0_f64 * 0.9).floor() as u64;
+        assert!((context.used_percent - 76_733.0 / compact as f64 * 100.0).abs() < 0.01);
         assert!(context.cache.is_none());
         assert_eq!(resolved.session_summary.as_deref(), Some("Topic for ses_1"));
     }
