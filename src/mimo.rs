@@ -44,59 +44,100 @@ const STEP_DATA_FOR_SESSION: &str = "SELECT part.data FROM part
      ORDER BY part.time_created DESC
      LIMIT 24";
 /// Assistant-message fallback when no usable main-agent `step-finish` has
-/// tokens yet.
+/// tokens yet. MiMo's footer uses the last assistant row with `tokens.output > 0`.
 const ASSISTANT_MESSAGE_DATA_FOR_SESSION: &str = "SELECT data FROM message
      WHERE session_id = ?1
        AND agent_id = 'main'
        AND json_extract(data, '$.role') = 'assistant'
      ORDER BY time_created DESC
-     LIMIT 8";
+     LIMIT 16";
 /// A table this layout needs. Absent means the layout is not in use.
 const TABLE_BY_NAME: &str =
     "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1 LIMIT 1";
 const MAX_MODELS_BYTES: u64 = 8 * 1024 * 1024;
 /// Two root sessions updated within this window of each other cannot be told
 /// apart from cwd alone; prefer no `cx` over a confidently wrong one.
-const AMBIGUITY_MARGIN_SECS: i64 = 120;
+/// `session.time_updated` is milliseconds (`Date.now()`), so this is 120s.
+const AMBIGUITY_MARGIN_MS: i64 = 120 * 1000;
+/// SQLite busy timeout for a locked/mid-write `mimocode.db`.
+const SQLITE_BUSY_TIMEOUT_MS: u64 = 100;
+/// Default compaction trigger ratio MiMo uses when flooring the usable window
+/// (`MIMOCODE_COMPACTION_TRIGGER_RATIO`, default 0.9).
+const DEFAULT_COMPACTION_TRIGGER_RATIO: f64 = 0.9;
 
 /// One on-disk layout of MiMo's session store.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MimoPaths {
     pub db: PathBuf,
     pub models: PathBuf,
+    pub config: PathBuf,
 }
 
 impl MimoPaths {
+    /// Prefer `MIMOCODE_HOME` (MiMo relocates `{data,cache,config}` under it),
+    /// then catalog overrides `MIMOCODE_MODELS_PATH` / `MIMO_MODELS_PATH`,
+    /// then XDG. `MIMO_DB_PATH` stays as a legacy alias for the database.
     pub fn from_env() -> Option<Self> {
+        if let Ok(home) = std::env::var("MIMOCODE_HOME") {
+            if !home.trim().is_empty() {
+                let home = PathBuf::from(home);
+                let models =
+                    models_override()?.unwrap_or_else(|| home.join("cache").join("models.json"));
+                return Some(Self {
+                    db: home.join("data").join("mimocode.db"),
+                    models,
+                    config: home.join("config").join("mimocode.jsonc"),
+                });
+            }
+        }
         if let Ok(db) = std::env::var("MIMO_DB_PATH") {
             if !db.trim().is_empty() {
                 let db = PathBuf::from(db);
-                let models = match std::env::var("MIMO_MODELS_PATH") {
-                    Ok(path) if !path.trim().is_empty() => PathBuf::from(path),
-                    _ => default_models_path()?,
+                let models = match models_override()? {
+                    Some(path) => path,
+                    None => default_models_path()?,
                 };
-                return Some(Self { db, models });
+                return Some(Self {
+                    db,
+                    models,
+                    config: config_path()?,
+                });
             }
         }
         let data = data_dir()?;
-        let models = match std::env::var("MIMO_MODELS_PATH") {
-            Ok(path) if !path.trim().is_empty() => PathBuf::from(path),
-            _ => cache_dir()?.join("models.json"),
+        let models = match models_override()? {
+            Some(path) => path,
+            None => cache_dir()?.join("models.json"),
         };
         Some(Self {
             db: data.join("mimocode.db"),
             models,
+            config: config_path()?,
         })
     }
 
-    /// Fixture layout: both files live in one directory.
+    /// Fixture layout: files live in one directory.
     pub fn from_dir(dir: impl Into<PathBuf>) -> Self {
         let dir = dir.into();
         Self {
             db: dir.join("mimocode.db"),
             models: dir.join("models.json"),
+            config: dir.join("mimocode.jsonc"),
         }
     }
+}
+
+/// `MIMOCODE_MODELS_PATH` first (MiMo’s own override), then legacy
+/// `MIMO_MODELS_PATH`. `None` means “use the default cache path”.
+fn models_override() -> Option<Option<PathBuf>> {
+    for key in ["MIMOCODE_MODELS_PATH", "MIMO_MODELS_PATH"] {
+        if let Ok(path) = std::env::var(key) {
+            if !path.trim().is_empty() {
+                return Some(Some(PathBuf::from(path)));
+            }
+        }
+    }
+    Some(None)
 }
 
 fn data_dir() -> Option<PathBuf> {
@@ -113,6 +154,18 @@ fn cache_dir() -> Option<PathBuf> {
     }
     let home = std::env::var_os("HOME")?;
     Some(PathBuf::from(home).join(".cache/mimocode"))
+}
+
+fn config_dir() -> Option<PathBuf> {
+    if let Some(xdg) = std::env::var_os("XDG_CONFIG_HOME") {
+        return Some(PathBuf::from(xdg).join("mimocode"));
+    }
+    let home = std::env::var_os("HOME")?;
+    Some(PathBuf::from(home).join(".config/mimocode"))
+}
+
+fn config_path() -> Option<PathBuf> {
+    Some(config_dir()?.join("mimocode.jsonc"))
 }
 
 fn default_models_path() -> Option<PathBuf> {
@@ -145,7 +198,7 @@ pub enum SessionLookup {
 ///    exposes one.
 /// 2. Otherwise the newest root session (`parent_id IS NULL`) whose
 ///    `directory` equals the pane cwd, provided no second root session was
-///    updated within [`AMBIGUITY_MARGIN_SECS`] of it.
+///    updated within [`AMBIGUITY_MARGIN_MS`] of it.
 pub fn resolve_session(paths: &MimoPaths, session_id: Option<&str>, cwd: &str) -> SessionLookup {
     if let Some(id) = session_id.map(str::trim).filter(|id| !id.is_empty()) {
         return lookup_by_id(paths, id);
@@ -180,7 +233,7 @@ pub fn resolve_session(paths: &MimoPaths, session_id: Option<&str>, cwd: &str) -
 fn choose_root_session(rows: &[SessionRow]) -> Option<String> {
     let newest = rows.first()?;
     if let Some(next) = rows.get(1) {
-        if next.time_updated + AMBIGUITY_MARGIN_SECS >= newest.time_updated {
+        if next.time_updated + AMBIGUITY_MARGIN_MS >= newest.time_updated {
             return None;
         }
     }
@@ -204,7 +257,10 @@ fn lookup_by_id(paths: &MimoPaths, session_id: &str) -> SessionLookup {
 }
 
 fn open_readonly(path: &Path) -> rusqlite::Result<Connection> {
-    Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+    let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+    // A short writer lock must not look like “no session”.
+    connection.busy_timeout(std::time::Duration::from_millis(SQLITE_BUSY_TIMEOUT_MS))?;
+    Ok(connection)
 }
 
 fn table_exists(connection: &Connection, name: &str) -> rusqlite::Result<bool> {
@@ -319,6 +375,10 @@ fn session_context(connection: &Connection, session_id: &str) -> rusqlite::Resul
         let Some(tokens) = value.get("tokens") else {
             continue;
         };
+        // Match MiMoCode's computeContextUsage: last assistant row with output.
+        if token(tokens, "output") == 0 {
+            continue;
+        }
         if let Some(occupied) = context_tokens_from_tokens(tokens) {
             return Ok(Some(occupied));
         }
@@ -344,11 +404,12 @@ fn provider_from_message(value: &Value) -> Option<(String, Option<String>)> {
 
 /// Context occupancy of one completed model step.
 ///
-/// Output and reasoning are excluded on purpose: MiMo folds them into the
-/// next request's input, so counting them here would double-count the window.
-/// `tokens.total` is not a shortcut — it mixes every counter and is version
-/// dependent. A step with every counter at zero is a free-model placeholder
-/// and yields no usage.
+/// Matches MiMoCode's `computeContextUsage` numerator:
+/// `input + output + reasoning + cache.read + cache.write`. Do **not** prefer
+/// `tokens.total` (its component set varies) and do **not** drop output or
+/// reasoning — those are part of the prompt occupancy the footer reports.
+/// A step with every counter at zero is a free-model placeholder and yields
+/// no usage.
 fn context_tokens_from_step(value: &Value) -> Option<u64> {
     if value.get("type").and_then(Value::as_str) != Some("step-finish") {
         return None;
@@ -357,15 +418,10 @@ fn context_tokens_from_step(value: &Value) -> Option<u64> {
 }
 
 fn context_tokens_from_tokens(tokens: &Value) -> Option<u64> {
-    // Prefer the same `total` the TUI divides by its compaction threshold.
-    // Fallback is prompt-cache occupancy (input + cache.read + cache.write).
-    if let Some(total) = tokens.get("total").and_then(Value::as_u64) {
-        if total > 0 {
-            return Some(total);
-        }
-    }
     let cache = tokens.get("cache").unwrap_or(&Value::Null);
     let occupied = token(tokens, "input")
+        .saturating_add(token(tokens, "output"))
+        .saturating_add(token(tokens, "reasoning"))
         .saturating_add(token(cache, "read"))
         .saturating_add(token(cache, "write"));
     (occupied > 0).then_some(occupied)
@@ -386,38 +442,104 @@ pub fn model_context_window(paths: &MimoPaths, provider_id: &str, model_id: &str
     resolve_limit(&value, provider_id, model_id)
 }
 
-/// Denominator that matches MiMoCode's own context bar.
+/// Denominator that matches MiMoCode's own context bar (`contextWindow` /
+/// `computeContextUsage`).
 ///
-/// The catalog publishes only `limit.context`. `mimo models` prints that as
-/// `window 1.05M, compacts at 944K` — the TUI percent is used/compact-at, and
-/// compact-at is ~90% of the hard window. An explicit `limit.compactAt` (or
-/// similar) wins if a future catalog adds it.
+/// `effective` is `compaction.max_context` when that budget is set and below
+/// the provider cap, otherwise `limit.input || limit.context`.
+/// `usable = floor(effective * trigger ratio)` with default 0.9.
+/// If the catalog cannot supply a cap, return `None` so the caller omits `cx`.
 pub fn display_context_window(paths: &MimoPaths, provider_id: &str, model_id: &str) -> Option<u64> {
     let value = read_models_json(&paths.models)?;
-    let limit = resolve_limit(&value, provider_id, model_id)?;
-    if let Some(compact) = compact_at(&value, provider_id, model_id) {
-        return Some(if compact > 0 { compact } else { limit });
-    }
-    Some(limit.saturating_mul(90) / 100).filter(|window| *window > 0)
+    let catalog_cap = resolve_limit(&value, provider_id, model_id)?;
+    let budget = config_max_context(&paths.config)?;
+    let effective = match budget {
+        Some(max_context) if max_context > 0 && max_context < catalog_cap => max_context,
+        _ => catalog_cap,
+    };
+    let ratio = compaction_trigger_ratio();
+    let usable = (effective as f64 * ratio).floor() as u64;
+    (usable > 0).then_some(usable)
 }
 
-/// Explicit compact-at from a future catalog, or `None` when absent.
-fn compact_at(value: &Value, provider_id: &str, model_id: &str) -> Option<u64> {
-    let model = value.get(provider_id)?.get("models")?.get(model_id)?;
-    for key in [
-        "compactAt",
-        "compact_at",
-        "compactionThreshold",
-        "contextCompactAt",
-    ] {
-        if let Some(n) = model.get(key).and_then(Value::as_u64) {
-            return Some(n);
+/// `compaction.max_context` from mimocode config / `MIMOCODE_COMPACTION_MAX_CONTEXT`.
+fn config_max_context(config_path: &Path) -> Option<Option<u64>> {
+    if let Ok(raw) = std::env::var("MIMOCODE_COMPACTION_MAX_CONTEXT") {
+        if let Ok(n) = raw.trim().parse::<u64>() {
+            return Some(Some(n));
         }
     }
-    model
-        .get("limit")
-        .and_then(|limit| limit.get("compactAt").or_else(|| limit.get("compact_at")))
-        .and_then(Value::as_u64)
+    let Ok(bytes) = fs::read(config_path) else {
+        // No config on disk: no budget override (catalog cap only).
+        return Some(None);
+    };
+    let text = String::from_utf8_lossy(&bytes);
+    let stripped = strip_jsonc_comments(&text);
+    let Ok(value) = serde_json::from_str::<Value>(&stripped) else {
+        return Some(None);
+    };
+    let max_context = value
+        .get("compaction")
+        .and_then(|c| c.get("max_context"))
+        .and_then(|v| {
+            v.as_u64()
+                .or_else(|| v.as_str().and_then(|s| s.parse::<u64>().ok()))
+        });
+    Some(max_context)
+}
+
+#[allow(clippy::while_let_on_iterator)]
+fn strip_jsonc_comments(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    let mut in_string = false;
+    while let Some(c) = chars.next() {
+        if in_string {
+            out.push(c);
+            if c == '\\' {
+                if let Some(next) = chars.next() {
+                    out.push(next);
+                }
+            } else if c == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        if c == '"' {
+            in_string = true;
+            out.push(c);
+            continue;
+        }
+        if c == '/' && chars.peek() == Some(&'/') {
+            while let Some(next) = chars.next() {
+                if next == '\n' {
+                    out.push('\n');
+                    break;
+                }
+            }
+            continue;
+        }
+        if c == '/' && chars.peek() == Some(&'*') {
+            chars.next();
+            while let Some(next) = chars.next() {
+                if next == '*' && chars.peek() == Some(&'/') {
+                    chars.next();
+                    break;
+                }
+            }
+            continue;
+        }
+        out.push(c);
+    }
+    out
+}
+
+fn compaction_trigger_ratio() -> f64 {
+    std::env::var("MIMOCODE_COMPACTION_TRIGGER_RATIO")
+        .ok()
+        .and_then(|raw| raw.trim().parse::<f64>().ok())
+        .filter(|ratio| *ratio > 0.0 && *ratio <= 1.0)
+        .unwrap_or(DEFAULT_COMPACTION_TRIGGER_RATIO)
 }
 
 fn resolve_limit(value: &Value, provider_id: &str, model_id: &str) -> Option<u64> {
@@ -482,7 +604,7 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
-    fn context_prefers_total_then_prompt_cache_occupancy() {
+    fn context_sums_input_output_reasoning_and_cache() {
         let step: Value = serde_json::from_str(
             r#"{"type":"step-finish","tokens":{
                 "total":77635,"input":5299,"output":715,"reasoning":197,
@@ -490,9 +612,9 @@ mod tests {
             }}"#,
         )
         .unwrap();
-        // TUI divides `total` by compact-at; total wins when present.
+        // Sum of all occupancy components, including output and reasoning.
         assert_eq!(context_tokens_from_step(&step), Some(77635));
-        // Without total: input + cache.read + cache.write only.
+        // Absent total is fine; components still sum.
         let no_total: Value = serde_json::from_str(
             r#"{"type":"step-finish","tokens":{
                 "input":5299,"output":715,"reasoning":197,
@@ -500,11 +622,11 @@ mod tests {
             }}"#,
         )
         .unwrap();
-        assert_eq!(context_tokens_from_step(&no_total), Some(76723));
+        assert_eq!(context_tokens_from_step(&no_total), Some(77635));
     }
 
     #[test]
-    fn display_window_is_ninety_percent_of_limit() {
+    fn display_window_is_trigger_ratio_of_the_effective_cap() {
         let directory = tempdir().unwrap();
         let paths = MimoPaths::from_dir(directory.path());
         fs::write(
@@ -512,9 +634,27 @@ mod tests {
             r#"{"xiaomi":{"models":{"mimo-v2.6-pro":{"limit":{"context":1048576}}}}}"#,
         )
         .unwrap();
+        // No max_context budget: usable = floor(limit.context * 0.9).
         assert_eq!(
             display_context_window(&paths, "xiaomi", "mimo-v2.6-pro"),
-            Some(1_048_576 * 90 / 100)
+            Some((1_048_576.0_f64 * 0.9).floor() as u64)
+        );
+    }
+
+    #[test]
+    fn a_lower_compaction_budget_shrinks_the_usable_window() {
+        let directory = tempdir().unwrap();
+        let paths = MimoPaths::from_dir(directory.path());
+        fs::write(
+            &paths.models,
+            r#"{"xiaomi":{"models":{"mimo-v2.6-pro":{"limit":{"context":1048576,"output":131072}}}}}"#,
+        )
+        .unwrap();
+        fs::write(&paths.config, r#"{"compaction":{"max_context":260000}}"#).unwrap();
+        // usable = floor(260000 * 0.9) = 234000
+        assert_eq!(
+            display_context_window(&paths, "xiaomi", "mimo-v2.6-pro"),
+            Some(234_000)
         );
     }
 
@@ -543,7 +683,7 @@ mod tests {
             .execute(
                 "INSERT INTO part (id, message_id, session_id, time_created, time_updated, data)
                  VALUES ('prt_main', 'msg_0', 'ses_1', 10, 10,
-                    '{\"type\":\"step-finish\",\"tokens\":{\"total\":200000,\"input\":1,\"cache\":{\"read\":0,\"write\":0}}}')",
+                    '{\"type\":\"step-finish\",\"tokens\":{\"input\":2000,\"output\":0,\"reasoning\":0,\"cache\":{\"read\":0,\"write\":0}}}')",
                 [],
             )
             .unwrap();
@@ -551,7 +691,7 @@ mod tests {
             .execute(
                 "INSERT INTO part (id, message_id, session_id, time_created, time_updated, data)
                  VALUES ('prt_explore', 'msg_explore', 'ses_1', 20, 20,
-                    '{\"type\":\"step-finish\",\"tokens\":{\"total\":40000,\"input\":1,\"cache\":{\"read\":0,\"write\":0}}}')",
+                    '{\"type\":\"step-finish\",\"tokens\":{\"input\":400,\"output\":0,\"reasoning\":0,\"cache\":{\"read\":0,\"write\":0}}}')",
                 [],
             )
             .unwrap();
@@ -559,8 +699,8 @@ mod tests {
         let SessionLookup::Found(evidence) = lookup else {
             panic!("expected Found, got {lookup:?}");
         };
-        // Newest overall is explore (40k); must use main (200k) instead.
-        assert_eq!(evidence.context_tokens, Some(200_000));
+        // Newest overall is explore (400); must use main (2000) instead.
+        assert_eq!(evidence.context_tokens, Some(2_000));
     }
 
     #[test]
@@ -575,11 +715,11 @@ mod tests {
     }
 
     #[test]
-    fn output_only_row_is_not_context() {
+    fn output_counts_toward_context_occupancy() {
         let tokens: Value =
             serde_json::from_str(r#"{"input":0,"output":40,"cache":{"read":0,"write":0}}"#)
                 .unwrap();
-        assert_eq!(context_tokens_from_tokens(&tokens), None);
+        assert_eq!(context_tokens_from_tokens(&tokens), Some(40));
     }
 
     #[test]
@@ -754,7 +894,7 @@ mod tests {
         };
         assert_eq!(evidence.provider_id.as_deref(), Some("xiaomi"));
         assert_eq!(evidence.model_id.as_deref(), Some("mimo-v2.6-pro"));
-        assert_eq!(evidence.context_tokens, Some(76723));
+        assert_eq!(evidence.context_tokens, Some(76_738));
         assert_eq!(evidence.title.as_deref(), Some("title-ses_1"));
     }
 
@@ -819,8 +959,8 @@ mod tests {
         write_fixture(
             &paths.db,
             &[
-                ("ses_a", "/proj", None, 1000),
-                ("ses_b", "/proj", None, 1000 + AMBIGUITY_MARGIN_SECS),
+                ("ses_a", "/proj", None, 1_792_320_000_000),
+                ("ses_b", "/proj", None, 1_792_320_000_000 + 30_000),
             ],
             &[],
             &[],
@@ -838,8 +978,8 @@ mod tests {
         write_fixture(
             &paths.db,
             &[
-                ("ses_old", "/proj", None, 1000),
-                ("ses_new", "/proj", None, 1000 + AMBIGUITY_MARGIN_SECS + 600),
+                ("ses_old", "/proj", None, 1_792_320_000_000),
+                ("ses_new", "/proj", None, 1_792_320_000_000 + 300_000),
             ],
             &[],
             &[],
@@ -902,6 +1042,6 @@ mod tests {
         let SessionLookup::Found(evidence) = lookup else {
             panic!("expected Found, got {lookup:?}");
         };
-        assert_eq!(evidence.context_tokens, Some(500));
+        assert_eq!(evidence.context_tokens, Some(510));
     }
 }
