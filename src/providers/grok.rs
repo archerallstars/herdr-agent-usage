@@ -255,6 +255,7 @@ fn enrich_local_sessions_at(
     cwds: &[(String, String)],
 ) {
     let sessions_dir = home.join("sessions");
+    let catalog = read_json(&home.join("models_cache.json")).ok();
     let active = read_active_sessions(home);
     let lookup_ids = expand_session_ids_with_active_siblings(&active, session_ids, cwds);
     let sessions = if lookup_ids.is_empty() {
@@ -272,7 +273,8 @@ fn enrich_local_sessions_at(
         else {
             continue;
         };
-        let Some(observation) = observe_session_dir(&session_dir, session_id) else {
+        let Some(observation) = observe_session_dir(&session_dir, session_id, catalog.as_ref())
+        else {
             continue;
         };
         if let Some(model) = observation.model.clone() {
@@ -309,11 +311,15 @@ fn enrich_local_sessions_at(
 }
 
 /// Grok stores sessions at `sessions/<encoded-cwd>/<session-id>/`. Context
-/// window usage lives in `signals.json`. Cache totals live in `usage.json`
-/// (`session.cachedReadTokens`); a long in-progress turn no longer writes
-/// `turn_completed` usage into the `updates.jsonl` tail — that tail is tool
-/// calls — so the jsonl scan is only a fallback. Newer sessions may only have
-/// `summary.json` (`current_model_id`) until the first usage signal is written.
+/// window usage lives in `signals.json` when Grok flushes it. Live 1.0.70
+/// sessions often leave that file unwritten; occupancy then comes from the
+/// latest `params._meta.totalTokens` in the bounded `updates.jsonl` tail,
+/// divided by the session window (`signals.json` or `models_cache.json`).
+/// Cache totals live in `usage.json` (`session.cachedReadTokens`); a long
+/// in-progress turn no longer writes `turn_completed` usage into the
+/// `updates.jsonl` tail — that tail is tool calls — so the jsonl cache scan
+/// is only a fallback. Newer sessions may only have `summary.json`
+/// (`current_model_id`) until the first usage signal is written.
 fn collect_recent_session_dirs(directory: &Path) -> Vec<(u64, PathBuf)> {
     let Ok(cwd_entries) = fs::read_dir(directory) else {
         return Vec::new();
@@ -596,15 +602,18 @@ struct LocalSessionObservation {
     summary: Option<String>,
 }
 
-fn observe_session_dir(session_dir: &Path, session_id: &str) -> Option<LocalSessionObservation> {
+fn observe_session_dir(
+    session_dir: &Path,
+    session_id: &str,
+    catalog: Option<&Value>,
+) -> Option<LocalSessionObservation> {
     let updates = read_jsonl_tail(&session_dir.join("updates.jsonl"));
     let usage = read_json(&session_dir.join("usage.json")).ok();
     let summary_json = read_json(&session_dir.join("summary.json")).ok();
-    let mut observation = read_json(&session_dir.join("signals.json"))
-        .ok()
-        .and_then(|signals| {
-            parse_local_session(&signals, updates.as_deref(), usage.as_ref(), session_id)
-        });
+    let signals = read_json(&session_dir.join("signals.json")).ok();
+    let mut observation = signals.as_ref().and_then(|signals| {
+        parse_local_session(signals, updates.as_deref(), usage.as_ref(), session_id)
+    });
     if observation
         .as_ref()
         .is_none_or(|observation| observation.model.is_none())
@@ -631,6 +640,32 @@ fn observe_session_dir(session_dir: &Path, session_id: &str) -> Option<LocalSess
                     context: None,
                     summary: Some(summary),
                 });
+            }
+        }
+    }
+    if observation
+        .as_ref()
+        .is_none_or(|observation| observation.context.is_none())
+    {
+        if let Some(context) = context_from_update_occupancy(
+            updates.as_deref(),
+            usage.as_ref(),
+            signals.as_ref(),
+            catalog,
+            observation
+                .as_ref()
+                .and_then(|observation| observation.model.as_deref()),
+            session_id,
+        ) {
+            match &mut observation {
+                Some(observation) => observation.context = Some(context),
+                None => {
+                    observation = Some(LocalSessionObservation {
+                        model: None,
+                        context: Some(context),
+                        summary: None,
+                    });
+                }
             }
         }
     }
@@ -757,6 +792,107 @@ fn parse_update_cache(updates: Option<&str>, session_id: &str) -> Option<CacheUs
         }
     }
     latest
+}
+
+/// Latest `params._meta.totalTokens` in the already-loaded updates tail.
+/// Grok 1.0.70 still writes this on every ACP update while leaving
+/// `signals.json` unflushed for open sessions. This is occupancy, not the
+/// billed `usage.json` session total.
+fn parse_update_occupancy(updates: Option<&str>) -> Option<u64> {
+    let mut latest = None;
+    for line in updates?.lines().rev() {
+        let Ok(value) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        let Some(tokens) = update_total_tokens(&value) else {
+            continue;
+        };
+        latest = Some(tokens);
+        break;
+    }
+    latest
+}
+
+fn update_total_tokens(value: &Value) -> Option<u64> {
+    value
+        .pointer("/params/_meta/totalTokens")
+        .or_else(|| value.pointer("/params/_meta/total_tokens"))
+        .or_else(|| value.pointer("/_meta/totalTokens"))
+        .and_then(Value::as_u64)
+}
+
+fn signal_context_window(signals: &Value) -> Option<u64> {
+    signals
+        .get("contextWindowTokens")
+        .or_else(|| signals.get("context_window_tokens"))
+        .and_then(Value::as_u64)
+        .filter(|window| *window > 0)
+}
+
+fn catalog_model_windows(catalog: Option<&Value>, model_id: &str) -> Option<(u64, Vec<u64>)> {
+    let info = catalog?.get("models")?.get(model_id)?.get("info")?;
+    let default_window = info
+        .get("context_window")
+        .or_else(|| info.get("contextWindow"))
+        .and_then(Value::as_u64)
+        .filter(|window| *window > 0)?;
+    let advertised_windows = info
+        .get("context_windows")
+        .or_else(|| info.get("contextWindows"))
+        .and_then(Value::as_array)
+        .map(|windows| {
+            windows
+                .iter()
+                .filter_map(Value::as_u64)
+                .filter(|window| *window > 0)
+                .collect()
+        })
+        .unwrap_or_default();
+    Some((default_window, advertised_windows))
+}
+
+/// Window for occupancy-based `cx`. Signals win when they name a size;
+/// otherwise the catalog default, then the smallest advertised size that
+/// still fits occupancy. Never a hardcoded 256k.
+fn resolve_context_window(
+    signals: Option<&Value>,
+    catalog: Option<&Value>,
+    model_id: Option<&str>,
+    occupancy: u64,
+) -> Option<u64> {
+    if let Some(window) = signals.and_then(signal_context_window) {
+        return Some(window);
+    }
+    let (default_window, advertised_windows) = catalog_model_windows(catalog, model_id?)?;
+    if occupancy > default_window {
+        if let Some(fitted) = advertised_windows
+            .into_iter()
+            .filter(|window| *window >= occupancy)
+            .min()
+        {
+            return Some(fitted);
+        }
+    }
+    Some(default_window)
+}
+
+fn context_from_update_occupancy(
+    updates: Option<&str>,
+    usage: Option<&Value>,
+    signals: Option<&Value>,
+    catalog: Option<&Value>,
+    model_id: Option<&str>,
+    session_id: &str,
+) -> Option<ContextUsage> {
+    let occupancy = parse_update_occupancy(updates)?;
+    let window = resolve_context_window(signals, catalog, model_id, occupancy)?;
+    let used = (occupancy as f64 / window as f64 * 100.0).clamp(0.0, 100.0);
+    let cache = parse_usage_file_cache(usage, session_id)
+        .or_else(|| parse_update_cache(updates, session_id))
+        .or_else(|| signals.and_then(|signals| parse_signal_cache(signals, session_id)));
+    ContextUsage::new(used)
+        .ok()
+        .map(|context| context.with_cache(cache))
 }
 
 fn cache_usage(input: u64, read: u64, creation: u64, session_id: &str) -> Option<CacheUsage> {
@@ -1107,6 +1243,166 @@ mod tests {
             r#"{"current_model_id":"grok-4.6"}"#,
         )
         .unwrap();
+        let mut snapshot = ProviderSnapshot::new(Provider::Grok, vec![], 1);
+        enrich_local_sessions_at(
+            &mut snapshot,
+            directory.path(),
+            &["session-1".to_string()],
+            &[],
+        );
+        assert_eq!(snapshot.session_models["session-1"], "grok-4.6");
+        assert!(snapshot.context_for_session(Some("session-1")).is_none());
+    }
+
+    fn write_grok_models_cache(home: &Path, model_id: &str, window: u64, windows: &[u64]) {
+        fs::write(
+            home.join("models_cache.json"),
+            json!({
+                "models": {
+                    model_id: {
+                        "info": {
+                            "context_window": window,
+                            "context_windows": windows
+                        }
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+    }
+
+    fn write_occupancy_updates(session_dir: &Path, occupancy: u64) {
+        fs::write(
+            session_dir.join("updates.jsonl"),
+            format!(
+                "{{\"method\":\"session/update\",\"params\":{{\"_meta\":{{\"totalTokens\":1}}}}}}\n\
+                 {{\"method\":\"session/update\",\"params\":{{\"sessionId\":\"session-1\",\"update\":{{}},\"_meta\":{{\"totalTokens\":{occupancy}}}}}}}\n"
+            ),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn updates_tail_occupancy_fills_cx_when_signals_are_missing() {
+        let directory = tempfile::tempdir().unwrap();
+        let session_dir = directory.path().join("sessions/cwd/session-1");
+        fs::create_dir_all(&session_dir).unwrap();
+        write_grok_models_cache(directory.path(), "grok-4.6", 256_000, &[256_000, 500_000]);
+        fs::write(
+            session_dir.join("summary.json"),
+            r#"{"current_model_id":"grok-4.6"}"#,
+        )
+        .unwrap();
+        write_occupancy_updates(&session_dir, 66_633);
+        let mut snapshot = ProviderSnapshot::new(Provider::Grok, vec![], 1);
+        enrich_local_sessions_at(
+            &mut snapshot,
+            directory.path(),
+            &["session-1".to_string()],
+            &[],
+        );
+        let used = snapshot
+            .context_for_session(Some("session-1"))
+            .unwrap()
+            .used_percent;
+        assert!((used - 66_633.0 / 256_000.0 * 100.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn signals_context_percent_wins_over_updates_occupancy() {
+        let directory = tempfile::tempdir().unwrap();
+        let session_dir = directory.path().join("sessions/cwd/session-1");
+        fs::create_dir_all(&session_dir).unwrap();
+        write_grok_models_cache(directory.path(), "grok-4.6", 256_000, &[256_000, 500_000]);
+        fs::write(
+            session_dir.join("signals.json"),
+            r#"{"contextWindowUsage":16,"primaryModelId":"grok-4.6"}"#,
+        )
+        .unwrap();
+        write_occupancy_updates(&session_dir, 66_633);
+        let mut snapshot = ProviderSnapshot::new(Provider::Grok, vec![], 1);
+        enrich_local_sessions_at(
+            &mut snapshot,
+            directory.path(),
+            &["session-1".to_string()],
+            &[],
+        );
+        assert_eq!(
+            snapshot
+                .context_for_session(Some("session-1"))
+                .unwrap()
+                .used_percent,
+            16.0
+        );
+    }
+
+    #[test]
+    fn usage_json_session_total_is_not_occupancy() {
+        let directory = tempfile::tempdir().unwrap();
+        let session_dir = directory.path().join("sessions/cwd/session-1");
+        fs::create_dir_all(&session_dir).unwrap();
+        write_grok_models_cache(directory.path(), "grok-4.6", 256_000, &[256_000, 500_000]);
+        fs::write(
+            session_dir.join("summary.json"),
+            r#"{"current_model_id":"grok-4.6"}"#,
+        )
+        .unwrap();
+        fs::write(
+            session_dir.join("usage.json"),
+            r#"{"session":{"totalTokens":800084,"inputTokens":1000,"cachedReadTokens":0}}"#,
+        )
+        .unwrap();
+        write_occupancy_updates(&session_dir, 66_633);
+        let mut snapshot = ProviderSnapshot::new(Provider::Grok, vec![], 1);
+        enrich_local_sessions_at(
+            &mut snapshot,
+            directory.path(),
+            &["session-1".to_string()],
+            &[],
+        );
+        let context = snapshot.context_for_session(Some("session-1")).unwrap();
+        assert!((context.used_percent - 66_633.0 / 256_000.0 * 100.0).abs() < 1e-9);
+        assert_ne!(context.used_percent, 100.0);
+    }
+
+    #[test]
+    fn occupancy_above_catalog_default_uses_the_smallest_fitting_window() {
+        let directory = tempfile::tempdir().unwrap();
+        let session_dir = directory.path().join("sessions/cwd/session-1");
+        fs::create_dir_all(&session_dir).unwrap();
+        write_grok_models_cache(directory.path(), "grok-4.6", 256_000, &[256_000, 500_000]);
+        fs::write(
+            session_dir.join("summary.json"),
+            r#"{"current_model_id":"grok-4.6"}"#,
+        )
+        .unwrap();
+        write_occupancy_updates(&session_dir, 267_442);
+        let mut snapshot = ProviderSnapshot::new(Provider::Grok, vec![], 1);
+        enrich_local_sessions_at(
+            &mut snapshot,
+            directory.path(),
+            &["session-1".to_string()],
+            &[],
+        );
+        let used = snapshot
+            .context_for_session(Some("session-1"))
+            .unwrap()
+            .used_percent;
+        assert!((used - 267_442.0 / 500_000.0 * 100.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn occupancy_without_a_window_hides_cx() {
+        let directory = tempfile::tempdir().unwrap();
+        let session_dir = directory.path().join("sessions/cwd/session-1");
+        fs::create_dir_all(&session_dir).unwrap();
+        fs::write(
+            session_dir.join("summary.json"),
+            r#"{"current_model_id":"grok-4.6"}"#,
+        )
+        .unwrap();
+        write_occupancy_updates(&session_dir, 66_633);
         let mut snapshot = ProviderSnapshot::new(Provider::Grok, vec![], 1);
         enrich_local_sessions_at(
             &mut snapshot,

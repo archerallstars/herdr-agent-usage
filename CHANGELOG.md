@@ -24,6 +24,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   upstream (vendor range `U+E1A0–E1B6`); terminal maps and fontconfig append
   both families.
 
+### Fixed
+
+- Grok `cx` reads live occupancy from the bounded `updates.jsonl` tail
+  (`params._meta.totalTokens`) when `signals.json` is missing, which Grok
+  Build 1.0.70 no longer flushes for open sessions. The window comes from
+  `signals.json` when present, otherwise the model's `models_cache.json`
+  default, stepping up to an advertised `context_windows` size if occupancy
+  already exceeds that default. Session `usage.json` totals stay billing, not
+  occupancy.
+
 ## [1.7.0] - 2026-10-14
 
 ### Added

@@ -215,7 +215,7 @@ normal quota percentage instead of guessing.
 | Agent | Quota source | Attribution |
 | --- | --- | --- |
 | Codex | Codex app-server; 5h and/or 7d | Current login in the plugin's `CODEX_HOME` |
-| Grok | CLI billing endpoint; 7d or 30d | Current CLI credentials |
+| Grok | CLI billing endpoint; 7d or 30d. `cx` from `signals.json`, else the session `updates.jsonl` tail (`_meta.totalTokens`) against the catalog window | Current CLI credentials |
 | Devin | CLI usage endpoint; 1d and 7d | Current CLI credentials |
 | Muse Code | CLI subscription endpoint; 5h and 7d | Current CLI account login; session via Muse's session lock (Linux) |
 | Cursor | CLI DashboardService usage; at, api, and 30d | Current CLI `auth.json`, else the macOS Keychain login from `cursor-agent login`, else `$CURSOR_STATE_DB` (`state.vscdb` access token) when the CLI has no login; model from local session files; topic from the generated session title; `cx` from `store.db` `token_details` (the CLI footer percent); cache from CLI hooks |

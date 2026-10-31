@@ -183,7 +183,7 @@ Claude 状态栏节奏是独立开关，默认开启以保持升级前行为；�
 | Agent | 额度来源 | 归属依据 |
 | --- | --- | --- |
 | Codex | Codex app-server；5h 和／或 7d | 插件 `CODEX_HOME` 中的当前登录 |
-| Grok | CLI billing 接口；7d 或 30d | 当前 CLI 凭据 |
+| Grok | CLI billing 接口；7d 或 30d。`cx` 来自 `signals.json`，否则用会话 `updates.jsonl` 尾部的 `_meta.totalTokens` 对照模型目录窗口 | 当前 CLI 凭据 |
 | Devin | CLI usage 接口；1d 和 7d | 当前 CLI 凭据 |
 | Muse Code | CLI 订阅接口；5h 和 7d | 当前 CLI 账号登录；会话通过 Muse 的 session lock 识别（Linux） |
 | Cursor | CLI DashboardService usage；at、api 和 30d | 当前 CLI `auth.json`，否则 macOS Keychain 里 `cursor-agent login` 的登录，否则在 CLI 没有自己的登录且设置了 `$CURSOR_STATE_DB` 时用桌面端 `state.vscdb` 的 access token；模型和主题来自本地会话文件；`cx` 来自 `store.db` `token_details`（CLI 底栏百分比）；cache 来自 CLI hook |
