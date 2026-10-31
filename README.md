@@ -8,10 +8,10 @@ Space, with brand icons that carry agent status.
 
 [简体中文](README.zh-CN.md)
 
-> **Project moved:** The previous maintainer GitHub account (`levi-qiao`) was
-> suspended, making the original repository unavailable. This repository is the
-> new maintained home of `herdr-agent-usage`, with the existing source and Git
-> history preserved. Please use the repository and installation links below.
+> **Maintained here:** [`archerallstars/herdr-agent-usage`](https://github.com/archerallstars/herdr-agent-usage).
+> Earlier homes (`levi-qiao/herdr-agent-usage`, then
+> `guannanjiayou/herdr-agent-usage`) are gone. Source and Git history are
+> preserved. Clone and install from the links below.
 
 <img src="docs/screenshots/sidebar-gauges.png" alt="Space-grouped gauges sidebar" width="320">
 
@@ -60,7 +60,8 @@ cd herdr-agent-usage
 ./install.sh
 ```
 
-The GitHub repository and Herdr plugin id are both `herdr-agent-usage`.
+The GitHub repository is `archerallstars/herdr-agent-usage`. The Herdr plugin
+id is `herdr-agent-usage`.
 `./install.sh` adopts an existing `herdr-agent-quota` install even when Herdr
 has already switched the linked id, then unlinks the old id. The first launch
 of the new binary adopts the same directories. Run `./install.sh` after
@@ -191,7 +192,7 @@ herdr plugin pane open --plugin herdr-agent-usage --entrypoint settings --focus
 | Fields | Provider, topic, model, context, short/long/monthly quota on by default; cache and TTL optional |
 | Agent order | Group by Space, least quota left first (default); by Space in tab order with one account's tabs together; or Herdr's own policy |
 | Low quota alert | Off or a threshold from 1% to 100% |
-| Agents | Claude, Codex, Grok, Agy, OpenCode, Pi, OMP, Devin, Muse, Cursor, Kilo |
+| Agents | Claude, Codex, Grok, Agy, OpenCode, Pi, OMP, Devin, Muse, Cursor, Kilo, MiMo |
 
 Use arrows or Space to edit, `a` to apply, and `q` to close.
 Installer options are also available through `./install.sh --help`.

@@ -38,7 +38,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Clone, CI, and repository links now point at
   `archerallstars/herdr-agent-usage` after the previous maintainer repository
-  became unavailable.
+  became unavailable. The README names this GitHub repo as the maintained
+  home.
 
 ## [1.7.0] - 2026-10-14
 

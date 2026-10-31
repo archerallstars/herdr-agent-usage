@@ -8,9 +8,9 @@ agent 状态。
 
 [English](README.md)
 
-> **项目迁移说明：** 原维护者的 GitHub 账号（`levi-qiao`）被封，旧仓库已无法访问。
-> 本仓库是 `herdr-agent-usage` 重新建立的维护仓库，保留了原有源码与 Git 历史。
-> 后续更新和安装请使用下方的新仓库链接。
+> **当前维护仓库：** [`archerallstars/herdr-agent-usage`](https://github.com/archerallstars/herdr-agent-usage)。
+> 此前的 `levi-qiao/herdr-agent-usage` 与 `guannanjiayou/herdr-agent-usage` 均已无法访问。
+> 源码与 Git 历史保留。请使用下方链接克隆和安装。
 
 <img src="docs/screenshots/sidebar-gauges.png" alt="按 Space 分组的 gauges 侧栏" width="320">
 
@@ -47,7 +47,8 @@ cd herdr-agent-usage
 ./install.sh
 ```
 
-GitHub 仓库名和 Herdr 插件 id 都是 `herdr-agent-usage`。`./install.sh` 会接管已有的
+GitHub 仓库是 `archerallstars/herdr-agent-usage`。Herdr 插件 id 是
+`herdr-agent-usage`。`./install.sh` 会接管已有的
 `herdr-agent-quota` 配置和状态，即使 Herdr 已经把链接换成新 id 也会从磁盘上的旧目录
 搬过去，然后再 unlink 仍在列表里的旧 id。新二进制第一次启动时也会搬 Herdr 注入的那两个
 目录。拉取之后请再跑一次 `./install.sh`，Cursor 的 hook 命令才会改写；在那之前旧脚本
@@ -173,7 +174,7 @@ herdr plugin pane open --plugin herdr-agent-usage --entrypoint settings --focus
 | Fields | 默认开启提供方、主题、模型、上下文、短期／长期／月度额度；cache 与 TTL 可选 |
 | Agent order | 按 Space 分组，组内剩余额度最少优先（默认）；按 Space 保持标签页顺序、同一账号的标签页放在一起；或使用 Herdr 自己的排序 |
 | Low quota alert | 关闭，或设置 1%–100% 的提醒阈值 |
-| Agents | Claude、Codex、Grok、Agy、OpenCode、Pi、OMP、Devin、Muse、Cursor、Kilo |
+| Agents | Claude、Codex、Grok、Agy、OpenCode、Pi、OMP、Devin、Muse、Cursor、Kilo、MiMo |
 
 方向键或空格修改，`a` 应用，`q` 关闭。脚本配置选项见 `./install.sh --help`。
 Claude 状态栏节奏是独立开关，默认开启以保持升级前行为；可用 `./install.sh --statusline-pace off` 关闭，关闭时仍会正常采集额度观测并供侧栏使用。
@@ -194,6 +195,16 @@ Claude 状态栏节奏是独立开关，默认开启以保持升级前行为；�
 | OMP | `omp usage --json --provider <id>` | usage 账号与会话 credential pin 一致；多个已存 API key（omp 的报告不带身份信息）时显示整个池（`1/2 keys usable · next 3h10m`） |
 | Kilo Code | Kilo Pass 账号状态（`kiloPass.getState`）；30d | Kilo `auth.json` 里的 OAuth 网关登录，且只对后端为 Kilo Gateway 的会话生效；上下文取自该会话的消息与 Kilo 的模型目录 |
 | MiMo | 仅上下文（无额度 API；无 5h/7d/30d） | MiMo 的 `mimocode.db` 会话 token 与 `models.json` 目录；标题来自 session 行 |
+
+### MiMo + mimo-code-herdr
+
+Herdr 没有原生 MiMo integration。请把本插件与
+[mimo-code-herdr](https://github.com/archerallstars/mimo-code-herdr) 一起用（自定义
+`mimo` agent：生命周期与会话上报）。有了这座桥，窗格才会显示为 `mimo`，本插件
+才能发布身份、主题和 `cx`。没有它，Herdr 没有可挂额度 token 的 `mimo` 行。
+
+本插件不读取 MiMo 窗格输出；上下文来自只读的 `mimocode.db` 和模型目录。MiMo
+没有额度 API，因此 5h/7d/30d 保持为空。
 
 Claude Code 状态栏始终保留用户自己的 statusLine 输出。**StatusLine pace** 默认开启以保持现有行为；
 关闭后不再追加节奏。开启时会在末尾追加当前生效额度窗口的消耗节奏，例如 `⏱ 5h ↓12%`：
