@@ -3,7 +3,7 @@
 Model, context, and subscription quota in Herdr's Agent sidebar — grouped by
 Space, with brand icons that carry agent status.
 
-[![CI](https://github.com/guannanjiayou/herdr-agent-usage/actions/workflows/ci.yml/badge.svg)](https://github.com/guannanjiayou/herdr-agent-usage/actions/workflows/ci.yml)
+[![CI](https://github.com/archerallstars/herdr-agent-usage/actions/workflows/ci.yml/badge.svg)](https://github.com/archerallstars/herdr-agent-usage/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 [简体中文](README.zh-CN.md)
@@ -55,7 +55,7 @@ Requires **Herdr 0.9.0+**, the Rust toolchain pinned in `rust-toolchain.toml`,
 macOS or Linux, and a supported agent CLI.
 
 ```sh
-git clone https://github.com/guannanjiayou/herdr-agent-usage.git
+git clone https://github.com/archerallstars/herdr-agent-usage.git
 cd herdr-agent-usage
 ./install.sh
 ```
@@ -102,7 +102,7 @@ Install and fully configure herdr-agent-usage on this computer until Herdr's
 Agent sidebar shows brand icons and quota for the agent CLIs I actually have.
 Stopping after ./install.sh is not done. Icons as boxes or "?" are unfinished.
 
-Repo: https://github.com/guannanjiayou/herdr-agent-usage
+Repo: https://github.com/archerallstars/herdr-agent-usage
 If this working tree is already that repo, use it; otherwise clone it, cd in,
 and follow docs/agent-setup.md (English) or docs/agent-setup.zh-CN.md (中文).
 If you cannot read those files, do all of the following anyway.
